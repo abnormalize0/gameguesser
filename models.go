@@ -28,13 +28,29 @@ type BotMessage struct {
 	Text string			`json:"text"`
 	Photo string		`json:"photo"`
 	Caption string		`json:"caption"`
+	//Select ReplyKeyboardMarkup	`json:"reply_markup"`
 }
 
 type RawgUpdate struct {
 	Name string			`json:"name"`
 	Image []ScrSht		`json:"short_screenshots"`
+	Tags []Tags			`json:"tags"`	
 }
 
 type ScrSht struct {
 	Link string			`json:"image"`
 }
+
+type Tags struct {
+	Tag string			`json:"slug"`
+}
+/*
+type ReplyKeyboardMarkup struct {
+	keyboard [1][4]KeyboardButton	`json:"keyboard"`
+	parameter1 bool		`json:"one_time_keyboard"`
+	parameter2 bool		`json:"resize_keyboard"`
+}
+
+type KeyboardButton struct {
+	text [1]string 		`json:"text"`
+}*/
