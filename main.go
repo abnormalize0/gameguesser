@@ -53,16 +53,16 @@ func process(state int, tg_url string, rawg_url string, update Update) (int) {
 		var message BotMessage
 		message.ChatID = update.Message.Chat.ChatID
 		games := get_random_game(rawg_url, "0,40")
-		message.Photo = games.Image[rand.Intn(len(games.Image))].Link
+		s1 := rand.NewSource(time.Now().UnixNano())
+		r1 := rand.New(s1)
+		message.Photo = games.Image[r1.Intn(len(games.Image))].Link
 		//message.Caption = games.Name
 		buf, _ := json.Marshal(message)
 		_, _ = http.Post(tg_url + "/sendPhoto", "application/json", bytes.NewBuffer(buf))
-		s1 := rand.NewSource(time.Now().UnixNano())
-		r1 := rand.New(s1)
 		var options [4]string
 		answer := r1.Intn(4)
 		options[answer] = games.Name
-		similar_games := get_similar_game(rawg_url, games.Name)
+		similar_games := get_similar_game(rawg_url, games.Tags)
 		counter := 0
 		for i := 0; i <4 ; i++ {
 			if similar_games[counter] == games.Name {
@@ -130,40 +130,52 @@ func get_random_game(rawg_url string, score string) (RawgUpdate) {
 
 	return rawg_response.Result[0]
 }
-/*
-func get_similar_game(rawg_url string, tags []Tags) ([4]string) {
-	var similar_games [4]string
-	maxtag := len(tags)
-	request := "&page=2&tags=" + tags[maxtag - 1].Tag + "&tags=" + tags[maxtag - 2].Tag + "&tags=" + tags[maxtag - 3].Tag + "&tags=" + tags[maxtag - 4].Tag + "&tags=" + tags[maxtag - 5].Tag + "&tags=" + tags[maxtag - 6].Tag + "&tags=" + tags[maxtag - 7].Tag + "&tags=" + tags[maxtag - 8].Tag + "&tags=" + tags[maxtag - 9].Tag + "&tags=" + tags[maxtag - 10].Tag + "&tags=" + tags[maxtag - 11].Tag + "&tags=" + tags[maxtag - 12].Tag
-	var rawg_response RawgResponse
-	resp, _ := http.Get(rawg_url + request)
-	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
-	_ = json.Unmarshal(body, &rawg_response)
-	for i := 0; i < 4; i++ {
-		similar_games[i] = rawg_response.Result[i].Name
-	}
-	return similar_games
-}*/
 
-func get_similar_game(rawg_url string, name string) ([6]string) {
+func get_similar_game(rawg_url string, tags []Tags) ([6]string) {
 	var similar_games [6]string
-	//maxtag := len(tags)
-	request := "&exclude_additions=true&search=" + name
+	request_tags := critical_tags(tags)
+	request := "&exclude_additions=true" + request_tags
 	var rawg_response RawgResponse
 	resp, _ := http.Get(rawg_url + request)
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	_ = json.Unmarshal(body, &rawg_response)
-	fmt.Println(len(rawg_response.Result))
-	if len(rawg_response.Result) < 6 {
-		resp, _ = http.Get(rawg_url)
+	pages := rawg_response.Pages
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+	//fmt.Println(request)
+	similar_games[0] = rawg_response.Result[r1.Intn(20)].Name
+	fmt.Println(similar_games[0])
+	for i := 1; i < 6; i++ {
+		request = "&page_size=1&page=" + strconv.Itoa(r1.Intn(pages - 1)) + "&exclude_additions=true" + request_tags
+		fmt.Println(request)
+		resp, _ = http.Get(rawg_url + request)
 		defer resp.Body.Close()
 		body, _ = ioutil.ReadAll(resp.Body)
 		_ = json.Unmarshal(body, &rawg_response)
-	} 
-	for i := 0; i < 6; i++ {
-		similar_games[i] = rawg_response.Result[i].Name
+		similar_games[i] = rawg_response.Result[0].Name
+		fmt.Println("here")
+		fmt.Println(similar_games[i])
+		
 	}
 	return similar_games
+}
+
+func critical_tags(tags []Tags) (string) {
+	var request string
+	critical := []string {"open-world", "first-person", "third-person", "Sci-fi", "2d", "horror", "fantasy", "gore", "sandbox", "survival", "exploration", "comedy", "stealth", 
+						  "tactical", "action-rpg", "pixel-graphics", "space", "zombies", "anime", "hack-and-slash", "turn-based", "post-apocalyptic", "survival-horror",
+						  "cute", "mystery", "side-scroller", "physics", "futuristic", "isometric", "walking-simulator", "roguelike", "parkour", "building", "top-down",
+						  "metroidvania", "mmo", "driving", "management", "visual-novel", "puzzle-platformer", "surreal", "3d-platformer", "war", "violent", "dark", "story",
+						  "vid-sboku", "platformer-2"}
+	for _, tag := range tags {
+		for _, critical_tag := range critical {
+			//fmt.Println(tag.Tag)
+			//fmt.Println(critical_tag)
+			if tag.Tag == critical_tag {
+				request = request + "&tags=" + critical_tag
+			}
+		}
+	}
+	return request
 }

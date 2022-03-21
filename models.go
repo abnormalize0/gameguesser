@@ -21,6 +21,7 @@ type TelegramResponse struct {
 type RawgResponse struct {
 	//Count int 			`json:"count"`
 	Result []RawgUpdate	`json:"results"`
+	Pages int 			`json:"count"`
 }
 
 type BotMessage struct {
