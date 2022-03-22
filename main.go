@@ -19,24 +19,40 @@ func main() {
 	tg_url := "https://api.telegram.org/bot" + tg_token
 	rawg_url := "https://api.rawg.io/api/games?key=" + rawg_token
 	offset := 0
-	state := -1
+	var states map[int]*Player
+	states = make(map[int]*Player)
 	for ;; {
 		updates, err := get_updates(tg_url, offset)
 		if err != nil {
 			log.Println("err: ", err.Error())
 		}
 		for _, update := range updates {
-			if state > 0 && strconv.Itoa(state) == update.Message.Text[0:1] {
+			chatID := update.Message.Chat.ChatID
+			if _, ok := states[chatID]; !ok {
+				new_challenger := &Player{State: -1, HP: 3}
+				states[chatID] = new_challenger
+			}
+			if states[chatID].HP == 0 {
+				update.Message.Text = "Игра окончена. Введите /start чтобы начать заново."
+				respond(tg_url, update)
+				states[chatID].State = -1
+				states[chatID].HP = 3
+			}
+			/*if states[chatID].State == 0 {
+				states[chatID].State = -1
+			}*/
+			if states[chatID].State > 0 && strconv.Itoa(states[chatID].State) == update.Message.Text[0:1] {
 				update.Message.Text = "Верно!"
 				respond(tg_url, update)
-				state = 0
-			} else if state > 0 {
-				update.Message.Text = "Неверно!"
+				states[chatID].State = -2
+			} else if states[chatID].State > 0 {
+				states[chatID].HP--
+				update.Message.Text = "Неверно! Осталось " + strconv.Itoa(states[chatID].HP) + " HP."
 				respond(tg_url, update)
-				state = 0
+				states[chatID].State = -2
 			}
 			
-			state = process(state, tg_url, rawg_url, update)
+			states[chatID].State = process(states[chatID].State, tg_url, rawg_url, update)
 			//respond(tg_url, update)
 			offset = update.UpdateID + 1
 		}
@@ -47,9 +63,9 @@ func main() {
 func process(state int, tg_url string, rawg_url string, update Update) (int) {
 	if state == -1 && update.Message.Text == "/start" {
 		update.Message.Text = "Введите 1 чтобы начать."
-		state = 0
+		state = -2
 		respond(tg_url, update)
-	} else if state == 0 {
+	} else if state == -2 {
 		var message BotMessage
 		message.ChatID = update.Message.Chat.ChatID
 		games := get_random_game(rawg_url, "0,40")
