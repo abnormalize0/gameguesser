@@ -47,4 +47,9 @@ type Tags struct {
 type Player struct {
 	State int
 	HP int
+	Score int
+}
+type Record struct {
+	Name string			`json:"name"`
+	Result int			`json:"result"`
 }

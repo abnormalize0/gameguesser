@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"time"
 	"strings"
+	"os"
 )
 
 func main() {
@@ -21,6 +22,7 @@ func main() {
 	offset := 0
 	var states map[int]*Player
 	states = make(map[int]*Player)
+	lowest := lowest_record()
 	for ;; {
 		updates, err := get_updates(tg_url, offset)
 		if err != nil {
@@ -29,19 +31,19 @@ func main() {
 		for _, update := range updates {
 			chatID := update.Message.Chat.ChatID
 			if _, ok := states[chatID]; !ok {
-				new_challenger := &Player{State: -1, HP: 3}
+				new_challenger := &Player{State: -1, HP: 3, Score: 0}
 				states[chatID] = new_challenger
 			}
 			if states[chatID].HP == 0 {
-				update.Message.Text = "Игра окончена. Введите /start чтобы начать заново."
-				respond(tg_url, update)
-				states[chatID].State = -1
+				if lowest < states[chatID].Score {
+					states[chatID].State = -3
+				} else {
+					states[chatID].State = -4
+				}
+				
 				states[chatID].HP = 3
-			}
-			/*if states[chatID].State == 0 {
-				states[chatID].State = -1
-			}*/
-			if states[chatID].State > 0 && strconv.Itoa(states[chatID].State) == update.Message.Text[0:1] {
+			}else if states[chatID].State > 0 && strconv.Itoa(states[chatID].State) == update.Message.Text[0:1] {
+				states[chatID].Score++
 				update.Message.Text = "Верно!"
 				respond(tg_url, update)
 				states[chatID].State = -2
@@ -50,6 +52,8 @@ func main() {
 				update.Message.Text = "Неверно! Осталось " + strconv.Itoa(states[chatID].HP) + " HP."
 				respond(tg_url, update)
 				states[chatID].State = -2
+			} else if states[chatID].State == -3 {
+				save_result(update.Message.Text, states[chatID].Score)
 			}
 			
 			states[chatID].State = process(states[chatID].State, tg_url, rawg_url, update)
@@ -92,6 +96,12 @@ func process(state int, tg_url string, rawg_url string, update Update) (int) {
 		_, _ = http.Get(tg_url + "/sendMessage" + "?text=Выберите правильный вариант&chat_id=" + strconv.Itoa(message.ChatID) + "&reply_markup={\"keyboard\":[[\"1: " + strings.ReplaceAll(options[0], "&", "") + "\"],[\"2: " + strings.ReplaceAll(options[1], "&", "") + "\"],[\"3: " + strings.ReplaceAll(options[2], "&", "") + "\"],[\"4: " + strings.ReplaceAll(options[3], "&", "") + "\"]],\"one_time_keyboard\":true,\"resize_keyboard\":true}")
 		state = answer + 1
 		//respond(tg_url, update)
+	} else if state == -3 {
+		update.Message.Text = "Игра окончена. Установлен рекорд! Введите свой ник:"
+		respond(tg_url, update)
+	} else if state == -4 {
+		update.Message.Text = "че"
+		respond(tg_url, update)
 	}
 	return state
 }
@@ -161,7 +171,6 @@ func get_similar_game(rawg_url string, tags []Tags) ([6]string) {
 	r1 := rand.New(s1)
 	//fmt.Println(request)
 	similar_games[0] = rawg_response.Result[r1.Intn(20)].Name
-	fmt.Println(similar_games[0])
 	for i := 1; i < 6; i++ {
 		request = "&page_size=1&page=" + strconv.Itoa(r1.Intn(pages - 1)) + "&exclude_additions=true" + request_tags
 		fmt.Println(request)
@@ -170,8 +179,6 @@ func get_similar_game(rawg_url string, tags []Tags) ([6]string) {
 		body, _ = ioutil.ReadAll(resp.Body)
 		_ = json.Unmarshal(body, &rawg_response)
 		similar_games[i] = rawg_response.Result[0].Name
-		fmt.Println("here")
-		fmt.Println(similar_games[i])
 		
 	}
 	return similar_games
@@ -195,3 +202,51 @@ func critical_tags(tags []Tags) (string) {
 	}
 	return request
 }
+
+func lowest_record() (int) {
+	current_min := 999999
+	file, _ := os.Open("records.json")
+	out, _ := ioutil.ReadAll(file)
+	var records []Record
+	json.Unmarshal(out, &records)
+	for _, record := range records {
+		if record.Result < current_min {
+			current_min = record.Result
+		}
+	}
+	defer file.Close()
+	return current_min
+}
+
+func save_result (name string, score int) {
+	lowest := lowest_record()
+	file, _ := os.Open("records.json")
+	out, _ := ioutil.ReadAll(file)
+	var records []Record
+	json.Unmarshal(out, &records)
+	candite := 0
+	for i := 0; i < len(records); i++ {
+		if records[i].Result == lowest {
+			candite = i
+			break
+		}
+	}
+	records[candite].Result = score
+	records[candite].Name = name
+	defer file.Close()
+	new_file, _ := json.MarshalIndent(records, "", " ")
+	_ = ioutil.WriteFile("records.json", new_file, 0644)
+
+}
+/*
+func display_records () {
+	file, _ := os.Open("records.json")
+	out, _ := ioutil.ReadAll(file)
+	var records []Record
+	json.Unmarshal(out, &records)
+	for _, record := range records {
+		if record.Result < current_min {
+			current_min = record.Result
+		}
+	}
+}*/
