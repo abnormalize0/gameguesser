@@ -66,10 +66,10 @@ func main() {
 
 func process(state int, tg_url string, rawg_url string, update Update) (int) {
 	if state == -1 && update.Message.Text == "/start" {
-		update.Message.Text = "Введите 1 чтобы начать."
+		update.Message.Text = "Введите 1 чтобы начать. Введите 2 чтобы открыть список лидеров."
 		state = -2
 		respond(tg_url, update)
-	} else if state == -2 {
+	} else if state == -2 && update.Message.Text == "1" {
 		var message BotMessage
 		message.ChatID = update.Message.Chat.ChatID
 		games := get_random_game(rawg_url, "0,40")
@@ -96,6 +96,10 @@ func process(state int, tg_url string, rawg_url string, update Update) (int) {
 		_, _ = http.Get(tg_url + "/sendMessage" + "?text=Выберите правильный вариант&chat_id=" + strconv.Itoa(message.ChatID) + "&reply_markup={\"keyboard\":[[\"1: " + strings.ReplaceAll(options[0], "&", "") + "\"],[\"2: " + strings.ReplaceAll(options[1], "&", "") + "\"],[\"3: " + strings.ReplaceAll(options[2], "&", "") + "\"],[\"4: " + strings.ReplaceAll(options[3], "&", "") + "\"]],\"one_time_keyboard\":true,\"resize_keyboard\":true}")
 		state = answer + 1
 		//respond(tg_url, update)
+	} else if state == -2 && update.Message.Text == "2" {
+		leaders := display_records()
+		update.Message.Text = leaders
+		respond(tg_url, update)
 	} else if state == -3 {
 		update.Message.Text = "Игра окончена. Установлен рекорд! Введите свой ник:"
 		respond(tg_url, update)
@@ -238,15 +242,15 @@ func save_result (name string, score int) {
 	_ = ioutil.WriteFile("records.json", new_file, 0644)
 
 }
-/*
-func display_records () {
+
+func display_records () (string) {
 	file, _ := os.Open("records.json")
 	out, _ := ioutil.ReadAll(file)
 	var records []Record
 	json.Unmarshal(out, &records)
+	output := "Лидеры:"
 	for _, record := range records {
-		if record.Result < current_min {
-			current_min = record.Result
-		}
+		output = output + "\n" + strconv.Itoa(record.Result) + " " + record.Name
 	}
-}*/
+	return output
+}
