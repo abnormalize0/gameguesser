@@ -12,6 +12,7 @@ import (
 	"time"
 	"strings"
 	"os"
+	"sort"
 )
 
 func main() {
@@ -34,26 +35,30 @@ func main() {
 				new_challenger := &Player{State: -1, HP: 3, Score: 0}
 				states[chatID] = new_challenger
 			}
-			if states[chatID].HP == 0 {
-				if lowest < states[chatID].Score {
-					states[chatID].State = -3
-				} else {
-					states[chatID].State = -4
-				}
-				
-				states[chatID].HP = 3
-			}else if states[chatID].State > 0 && strconv.Itoa(states[chatID].State) == update.Message.Text[0:1] {
+			if states[chatID].State > 0 && strconv.Itoa(states[chatID].State) == update.Message.Text[0:1] {
 				states[chatID].Score++
 				update.Message.Text = "Верно!"
 				respond(tg_url, update)
-				states[chatID].State = -2
+				states[chatID].State = -5
 			} else if states[chatID].State > 0 {
 				states[chatID].HP--
-				update.Message.Text = "Неверно! Осталось " + strconv.Itoa(states[chatID].HP) + " HP."
+				if states[chatID].HP == 0 {
+					update.Message.Text = "У вас закончились попытки. Игра окончена."
+					if lowest < states[chatID].Score {
+						states[chatID].State = -3
+					} else {
+						states[chatID].State = -4
+					}
+				}else {
+					update.Message.Text = "Неверно! Осталось " + strconv.Itoa(states[chatID].HP) + " HP."
+					states[chatID].State = -5
+				}
 				respond(tg_url, update)
-				states[chatID].State = -2
 			} else if states[chatID].State == -3 {
 				save_result(update.Message.Text, states[chatID].Score)
+				update.Message.Text = "Для продолжения игры введите /start."
+				states[chatID].State = - 1
+				respond(tg_url, update)
 			}
 			
 			states[chatID].State = process(states[chatID].State, tg_url, rawg_url, update)
@@ -65,11 +70,11 @@ func main() {
 }
 
 func process(state int, tg_url string, rawg_url string, update Update) (int) {
-	if state == -1 && update.Message.Text == "/start" {
-		update.Message.Text = "Введите 1 чтобы начать. Введите 2 чтобы открыть список лидеров."
+	if state == -1 && (update.Message.Text == "/start" || update.Message.Text == "Назад") {
+		_, _ = http.Get(tg_url + "/sendMessage" + "?text=Здарова&chat_id=" + strconv.Itoa(update.Message.Chat.ChatID) + "&reply_markup={\"keyboard\":[[\"1: Начать игру\"],[\"2: Таблица рекордов\"]],\"one_time_keyboard\":true,\"resize_keyboard\":true}")
 		state = -2
-		respond(tg_url, update)
-	} else if state == -2 && update.Message.Text == "1" {
+		//respond(tg_url, update)
+	} else if (state == -2 && update.Message.Text[0:1] == "1") || (state == -5) {
 		var message BotMessage
 		message.ChatID = update.Message.Chat.ChatID
 		games := get_random_game(rawg_url, "0,40")
@@ -93,19 +98,22 @@ func process(state int, tg_url string, rawg_url string, update Update) (int) {
 				counter++
 			}
 		}
-		_, _ = http.Get(tg_url + "/sendMessage" + "?text=Выберите правильный вариант&chat_id=" + strconv.Itoa(message.ChatID) + "&reply_markup={\"keyboard\":[[\"1: " + strings.ReplaceAll(options[0], "&", "") + "\"],[\"2: " + strings.ReplaceAll(options[1], "&", "") + "\"],[\"3: " + strings.ReplaceAll(options[2], "&", "") + "\"],[\"4: " + strings.ReplaceAll(options[3], "&", "") + "\"]],\"one_time_keyboard\":true,\"resize_keyboard\":true}")
+		_, _ = http.Get(tg_url + "/sendMessage" + "?text=Выберите правильный вариант&chat_id=" + strconv.Itoa(message.ChatID) + "&reply_markup={\"keyboard\":[[\"1: " + strings.ReplaceAll(options[0], "&", "and") + "\"],[\"2: " + strings.ReplaceAll(options[1], "&", "and") + "\"],[\"3: " + strings.ReplaceAll(options[2], "&", "and") + "\"],[\"4: " + strings.ReplaceAll(options[3], "&", "and") + "\"]],\"one_time_keyboard\":true,\"resize_keyboard\":true}")
 		state = answer + 1
 		//respond(tg_url, update)
-	} else if state == -2 && update.Message.Text == "2" {
+	} else if state == -2 && update.Message.Text[0:1] == "2" {
+		_, _ = http.Get(tg_url + "/sendMessage" + "?text=Таблица лидеров:&chat_id=" + strconv.Itoa(update.Message.Chat.ChatID) + "&reply_markup={\"keyboard\":[[\"Назад\"]],\"one_time_keyboard\":true,\"resize_keyboard\":true}")
 		leaders := display_records()
 		update.Message.Text = leaders
 		respond(tg_url, update)
+		state = -1
 	} else if state == -3 {
-		update.Message.Text = "Игра окончена. Установлен рекорд! Введите свой ник:"
+		update.Message.Text = "Установлен рекорд! Введите свой ник:"
 		respond(tg_url, update)
 	} else if state == -4 {
-		update.Message.Text = "че"
+		update.Message.Text = "Для продолжения игры введите /start."
 		respond(tg_url, update)
+		state = -1
 	}
 	return state
 }
@@ -171,6 +179,9 @@ func get_similar_game(rawg_url string, tags []Tags) ([6]string) {
 	body, _ := ioutil.ReadAll(resp.Body)
 	_ = json.Unmarshal(body, &rawg_response)
 	pages := rawg_response.Pages
+	if pages > 10000 {
+		pages = 10000
+	}
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
 	//fmt.Println(request)
@@ -248,9 +259,12 @@ func display_records () (string) {
 	out, _ := ioutil.ReadAll(file)
 	var records []Record
 	json.Unmarshal(out, &records)
-	output := "Лидеры:"
+	sort.SliceStable (records, func(i, j int) bool {
+		return records[j].Result < records[i].Result
+	})
+	output := ""
 	for _, record := range records {
-		output = output + "\n" + strconv.Itoa(record.Result) + " " + record.Name
+		output = output + strconv.Itoa(record.Result) + " " + record.Name + "\n"
 	}
 	return output
 }
